@@ -1,0 +1,334 @@
+<!doctype html>
+<html>
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Book a Parking Slot</title>
+    <link rel="stylesheet" href="/style.css" />
+    <style>
+      .booking-wrap {
+        display: grid;
+        grid-template-columns: 320px 1fr;
+        gap: 2rem;
+        align-items: start;
+      }
+      @media (max-width: 760px) {
+        .booking-wrap { grid-template-columns: 1fr; }
+      }
+      .panel {
+        border: 1px solid #d0d7de;
+        border-radius: 8px;
+        padding: 1rem;
+        background: #fff;
+      }
+      .panel h2 { margin-top: 0; font-size: 1.1rem; }
+      label { display: block; font-size: 0.85rem; margin: 0.6rem 0 0.2rem; color: #444; }
+      input, select, button {
+        font: inherit;
+        padding: 0.45rem 0.5rem;
+        border: 1px solid #d0d7de;
+        border-radius: 6px;
+        width: 100%;
+        box-sizing: border-box;
+      }
+      button.primary {
+        background: #1a73e8;
+        border-color: #1a73e8;
+        color: #fff;
+        cursor: pointer;
+        font-weight: 600;
+        margin-top: 1rem;
+      }
+      button.primary:disabled { background: #9ab4e0; cursor: not-allowed; }
+
+      /* --- Parking map --- */
+      .lot {
+        position: relative;
+        background: #3a3f45;
+        border-radius: 8px;
+        padding: 18px;
+        user-select: none;
+      }
+      .lot-title { color: #cfd6dd; font-size: 0.85rem; margin-bottom: 10px; text-align: center; }
+      .row-label {
+        color: #ffd166;
+        font-weight: 700;
+        font-size: 0.8rem;
+        text-align: center;
+        margin: 6px 0;
+        letter-spacing: 2px;
+      }
+      .slots { display: flex; gap: 8px; justify-content: center; flex-wrap: wrap; }
+      .slot {
+        width: 54px;
+        height: 84px;
+        border: 2px solid #8ecae6;
+        border-radius: 4px;
+        background: rgba(142, 202, 230, 0.15);
+        color: #e8f4fb;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        cursor: pointer;
+        font-size: 0.95rem;
+        font-weight: 700;
+        transition: transform 0.1s, background 0.15s;
+      }
+      .slot small { font-size: 0.6rem; font-weight: 400; opacity: 0.8; }
+      .slot:hover { transform: translateY(-3px); background: rgba(142, 202, 230, 0.35); }
+      .slot.selected {
+        background: #1a73e8;
+        border-color: #8ab4f8;
+        color: #fff;
+        box-shadow: 0 0 0 3px rgba(26, 115, 232, 0.45);
+      }
+      .slot.booked {
+        background: rgba(214, 69, 69, 0.55);
+        border-color: #ff7b7b;
+        color: #ffe3e3;
+        cursor: not-allowed;
+        text-decoration: line-through;
+      }
+      .lane {
+        height: 22px;
+        margin: 8px 0;
+        border-top: 3px dashed #f4a261;
+        border-bottom: 3px dashed #f4a261;
+        background: #454b52;
+        border-radius: 3px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        color: #f4a261;
+        font-size: 0.7rem;
+        letter-spacing: 4px;
+      }
+      .entrance {
+        background: #2a9d8f;
+        color: #fff;
+        text-align: center;
+        padding: 4px;
+        border-radius: 4px;
+        font-size: 0.75rem;
+        font-weight: 700;
+        margin-bottom: 8px;
+      }
+      .legend { display: flex; gap: 1rem; flex-wrap: wrap; margin-top: 12px; color: #cfd6dd; font-size: 0.78rem; }
+      .legend span { display: inline-flex; align-items: center; gap: 6px; }
+      .swatch { width: 14px; height: 14px; border-radius: 3px; display: inline-block; }
+      .msg { margin-top: 0.8rem; font-size: 0.9rem; padding: 0.6rem; border-radius: 6px; display: none; }
+      .msg.ok { display: block; background: #e6f4ea; color: #1e7e34; border: 1px solid #b7dfc1; }
+      .msg.err { display: block; background: #fce8e6; color: #b3261e; border: 1px solid #f5c6c2; }
+      .selected-info { margin-top: 0.6rem; font-size: 0.9rem; color: #333; }
+      .selected-info b { color: #1a73e8; }
+    </style>
+  </head>
+  <body>
+    <nav>
+      <a href="/">Home</a>
+      <a href="/book">Book Parking</a>
+      <a href="/about">About</a>
+      <a href="/api-data">API Data</a>
+      <a href="/healthz">Health</a>
+    </nav>
+
+    <h1>Book a Parking Slot 🅿️</h1>
+
+    <div class="booking-wrap">
+      <!-- Booking form -->
+      <div class="panel">
+        <h2>1. Your details</h2>
+        <form id="bookingForm">
+          <label for="phone">Phone number</label>
+          <input id="phone" name="phone" type="tel" placeholder="e.g. 5551234567" autocomplete="tel" required />
+
+          <label for="date">Date</label>
+          <input id="date" name="date" type="date" required />
+
+          <label for="time">Start time</label>
+          <input id="time" name="time" type="time" required />
+
+          <label for="duration">Duration (hours)</label>
+          <select id="duration" name="duration">
+            <option value="1">1 hour</option>
+            <option value="2">2 hours</option>
+            <option value="3" selected>3 hours</option>
+            <option value="4">4 hours</option>
+            <option value="6">6 hours</option>
+            <option value="8">8 hours</option>
+            <option value="12">12 hours</option>
+            <option value="24">24 hours</option>
+          </select>
+
+          <div class="selected-info" id="selectedInfo">No slot selected yet.</div>
+
+          <button class="primary" id="submitBtn" type="submit" disabled>Book slot</button>
+        </form>
+        <div class="msg" id="msg"></div>
+      </div>
+
+      <!-- Graphical parking map -->
+      <div class="panel">
+        <h2>2. Pick a slot on the map</h2>
+        <div class="lot">
+          <div class="entrance">▲ ENTRANCE / EXIT</div>
+          <div id="lotMap"></div>
+          <div class="legend">
+            <span><i class="swatch" style="background:rgba(142,202,230,.5);border:2px solid #8ecae6"></i> Available</span>
+            <span><i class="swatch" style="background:#1a73e8"></i> Selected</span>
+            <span><i class="swatch" style="background:rgba(214,69,69,.7)"></i> Booked</span>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <script>
+      // --- Lot layout: 3 rows x 8 slots, with a drive lane between rows ---
+      const ROWS = ['A', 'B', 'C'];
+      const SLOTS_PER_ROW = 8;
+
+      const state = { slots: [], selected: null, booked: [] };
+
+      const $ = (id) => document.getElementById(id);
+      const dateEl = $('date'), timeEl = $('time'), durEl = $('duration'),
+            phoneEl = $('phone'), msgEl = $('msg'), infoEl = $('selectedInfo'),
+            submitBtn = $('submitBtn');
+
+      // Default: today, next full hour
+      const now = new Date();
+      const pad = (n) => String(n).padStart(2, '0');
+      dateEl.value = `${now.getFullYear()}-${pad(now.getMonth() + 1)}-${pad(now.getDate())}`;
+      timeEl.value = `${pad(now.getHours())}:00`;
+
+      function buildLot() {
+        const map = $('lotMap');
+        map.innerHTML = '';
+        ROWS.forEach((row, i) => {
+          if (i > 0) {
+            const lane = document.createElement('div');
+            lane.className = 'lane';
+            lane.textContent = 'DRIVE LANE';
+            map.appendChild(lane);
+          }
+          const label = document.createElement('div');
+          label.className = 'row-label';
+          label.textContent = `ROW ${row}`;
+          map.appendChild(label);
+
+          const wrap = document.createElement('div');
+          wrap.className = 'slots';
+          for (let n = 1; n <= SLOTS_PER_ROW; n++) {
+            const id = `${row}${String(n).padStart(2, '0')}`;
+            const el = document.createElement('div');
+            el.className = 'slot';
+            el.dataset.slot = id;
+            el.innerHTML = `${id}<small>standard</small>`;
+            el.addEventListener('click', () => selectSlot(id));
+            state.slots.push(el);
+            wrap.appendChild(el);
+          }
+          map.appendChild(wrap);
+        });
+      }
+
+      function selectSlot(id) {
+        const el = state.slots.find((s) => s.dataset.slot === id);
+        if (!el || el.classList.contains('booked')) return;
+        state.selected = state.selected === id ? null : id;
+        state.slots.forEach((s) => s.classList.toggle('selected', s.dataset.slot === state.selected));
+        infoEl.innerHTML = state.selected
+          ? `Selected slot: <b>${state.selected}</b>`
+          : 'No slot selected yet.';
+        submitBtn.disabled = !state.selected;
+      }
+
+      function showMessage(text, ok) {
+        msgEl.textContent = text;
+        msgEl.className = 'msg ' + (ok ? 'ok' : 'err');
+      }
+
+      // Ask the server which slots are taken for the chosen date/time/duration
+      async function refreshAvailability() {
+        const qs = new URLSearchParams({
+          date: dateEl.value,
+          time: timeEl.value,
+          duration: durEl.value,
+        });
+        try {
+          const res = await fetch('/api/slots?' + qs);
+          const data = await res.json();
+          state.booked = data.booked || [];
+        } catch (e) {
+          state.booked = [];
+        }
+        state.slots.forEach((s) => {
+          const taken = state.booked.includes(s.dataset.slot);
+          s.classList.toggle('booked', taken);
+          if (taken && s.dataset.slot === state.selected) {
+            state.selected = null;
+            s.classList.remove('selected');
+            infoEl.textContent = 'No slot selected yet.';
+            submitBtn.disabled = true;
+          }
+        });
+      }
+
+      [dateEl, timeEl, durEl].forEach((el) =>
+        el.addEventListener('change', refreshAvailability)
+      );
+
+      $('bookingForm').addEventListener('submit', async (e) => {
+        e.preventDefault();
+        const phone = phoneEl.value.trim();
+        if (!/^[0-9+\-\s()]{7,20}$/.test(phone)) {
+          showMessage('Please enter a valid phone number.', false);
+          return;
+        }
+        if (!state.selected) {
+          showMessage('Please select a parking slot on the map.', false);
+          return;
+        }
+        const payload = {
+          slot: state.selected,
+          phone,
+          date: dateEl.value,
+          time: timeEl.value,
+          duration: Number(durEl.value),
+        };
+        submitBtn.disabled = true;
+        try {
+          const res = await fetch('/api/bookings', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(payload),
+          });
+          const data = await res.json();
+          if (!res.ok) {
+            showMessage(data.error || 'Booking failed.', false);
+            if (res.status === 409) {
+              state.selected = null;
+              state.slots.forEach((s) => s.classList.remove('selected'));
+              infoEl.textContent = 'No slot selected yet.';
+            }
+            return;
+          }
+          showMessage(
+            `Booked! Slot ${data.booking.slot} reserved for ${data.booking.date} ` +
+              `${data.booking.time} (${data.booking.duration}h) — confirmation sent to ${data.booking.phone}. ` +
+              `Booking ID: ${data.booking.id}`,
+            true
+          );
+          await refreshAvailability();
+        } catch (err) {
+          showMessage('Could not reach the server. Please try again.', false);
+        } finally {
+          submitBtn.disabled = !state.selected;
+        }
+      });
+
+      buildLot();
+      refreshAvailability();
+    </script>
+  </body>
+</html>
